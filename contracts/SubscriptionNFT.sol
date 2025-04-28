@@ -10,30 +10,51 @@ contract GigabrainPasses is ERC721, Ownable {
     uint256 private _tokenIds;
     string private _baseTokenURI;
 
-    uint256 public constant PASS_COST = 4990000; // 4.99 USDC with 6 decimals
-    uint256 public constant PASS_DURATION = 30 days;
-    uint256 public constant MAX_SUPPLY = 42;
+    uint256 public passCost;        // Editable pass cost
+    uint256 public passDuration;    // Editable pass validity duration
+    uint256 public maxSupply;       // Editable supply cap
 
     mapping(uint256 => uint256) public passExpiry; // tokenId => expiryTime
     mapping(address => uint256[]) private userTokenIds; // user => tokenIds
 
     event PassMinted(address indexed user, uint256 tokenId, uint256 expiryTime);
+    event MaxSupplyUpdated(uint256 newMaxSupply);
+    event PassCostUpdated(uint256 newPassCost);
+    event PassDurationUpdated(uint256 newDuration);
 
     constructor(address _usdcToken) ERC721("Gigabrain Pass", "GBP") Ownable(msg.sender) {
         usdcToken = IERC20(_usdcToken);
+        passCost = 4_990_000;    // 4.99 USDC default
+        passDuration = 30 days;  // 30 days default
+        maxSupply = 42;          // Initial supply
     }
 
+    // Regular paid mint
     function mintPass(address recipient) external {
-        require(totalSupply() < MAX_SUPPLY, "All passes minted");
-        require(usdcToken.allowance(msg.sender, address(this)) >= PASS_COST, "Insufficient USDC allowance");
+        require(totalSupply() < maxSupply, "All passes minted");
+        require(usdcToken.allowance(msg.sender, address(this)) >= passCost, "Insufficient USDC allowance");
 
         uint256 tokenId = ++_tokenIds;
 
-        require(usdcToken.transferFrom(msg.sender, address(this), PASS_COST), "USDC transfer failed");
+        require(usdcToken.transferFrom(msg.sender, address(this), passCost), "USDC transfer failed");
 
         _safeMint(recipient, tokenId);
 
-        passExpiry[tokenId] = block.timestamp + PASS_DURATION;
+        passExpiry[tokenId] = block.timestamp + passDuration;
+        userTokenIds[recipient].push(tokenId);
+
+        emit PassMinted(recipient, tokenId, passExpiry[tokenId]);
+    }
+
+    // Admin-only free mint
+    function adminMint(address recipient) external onlyOwner {
+        require(totalSupply() < maxSupply, "All passes minted");
+
+        uint256 tokenId = ++_tokenIds;
+
+        _safeMint(recipient, tokenId);
+
+        passExpiry[tokenId] = block.timestamp + passDuration;
         userTokenIds[recipient].push(tokenId);
 
         emit PassMinted(recipient, tokenId, passExpiry[tokenId]);
@@ -73,5 +94,25 @@ contract GigabrainPasses is ERC721, Ownable {
         uint256 balance = usdcToken.balanceOf(address(this));
         require(balance > 0, "No USDC to withdraw");
         require(usdcToken.transfer(to, balance), "USDC transfer failed");
+    }
+
+    // --------- OWNER CONTROL FUNCTIONS ---------
+    // These functions are only callable by the owner to update cost and duration and max supply.
+    function setMaxSupply(uint256 newMaxSupply) external onlyOwner {
+        require(newMaxSupply >= totalSupply(), "Cannot set maxSupply below minted passes");
+        maxSupply = newMaxSupply;
+        emit MaxSupplyUpdated(newMaxSupply);
+    }
+
+    function setPassCost(uint256 newPassCost) external onlyOwner {
+        require(newPassCost > 0, "Pass cost must be positive");
+        passCost = newPassCost;
+        emit PassCostUpdated(newPassCost);
+    }
+
+    function setPassDuration(uint256 newDuration) external onlyOwner {
+        require(newDuration > 0, "Duration must be positive");
+        passDuration = newDuration;
+        emit PassDurationUpdated(newDuration);
     }
 }
