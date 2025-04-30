@@ -8,7 +8,7 @@ const config: HardhatUserConfig = {
   solidity: "0.8.28",
   networks: {
     base: {
-      url: "https://mainnet.base.org",
+      url: "https://1rpc.io/base",
       accounts: [process.env.PRIVATE_KEY || ""],
       chainId: 8453,
     },
